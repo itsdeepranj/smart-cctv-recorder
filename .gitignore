@@ -1,0 +1,4 @@
+secrets/
+logs/
+recordings/
+.env
