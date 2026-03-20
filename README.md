@@ -144,14 +144,14 @@ use .env .example as a template
 
 ## Design Philosophy
 
-- **No heavy NVR software
-- **Full Control with simple tools
-- **Event-driven (not cron-based)
-- **Modular and scalable
-- **Built for unstable networks
+- No heavy NVR software
+- Full Control with simple tools
+- Event-driven (not cron-based)
+- Modular and scalable
+- Built for unstable networks
 
 ## Future Improvements
-- **Web dashboard
-- **Auto cleanup (retention policy)
-- **Cloud backup support
-- **Optional AI detection layer
+- Web dashboard
+- Auto cleanup (retention policy)
+- Cloud backup support
+- Optional AI detection layer

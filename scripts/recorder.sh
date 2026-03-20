@@ -1,0 +1,67 @@
+#!/bin/bash
+
+CONFIG="../config/cameras.conf"
+LOG="../logs/recorder.log"
+OUTPUT="../recordings"
+
+mkdir -p "$OUTPUT"
+mkdir -p "../logs"
+
+# Load secrets
+source ../secrets/credentials.env
+
+echo "==================================" >> $LOG
+echo "$(date) - Recorder started" >> $LOG
+
+# Function to get credentials
+get_credentials() {
+	case "$1" in
+		roof_cam)
+			USER=$ROOF_CAM_USER
+			PASS=$ROOF_CAM_PASS
+			;;
+		front_cam)
+			USER=$FRONT_CAM_USER
+			PASS=$FRONT_CAM_PASS
+			;;
+		side_cam)
+			USER=$SIDE_CAM_USER
+			PASS=$SIDE_CAM_PASS
+			;;
+		*)
+			echo "Unknown camera: $1" >> $LOG
+			return 1
+			;;
+	esac
+}
+
+# Start recording per camera
+while IFS=',' read -r NAME IP; do
+	
+	get_credentials "$NAME"
+
+	echo "$(date) - Starting $NAME ($IP)" >> $LOG
+
+	(
+	while true; do
+
+		echo "$(date) - [$NAME] Recording started" >> $LOG
+
+		ffmpeg -rtsp_transport tcp \
+		-i rtsp://$USER:$PASS@$IP:554/cam/realmonitor?channel=1&subtype=0 \
+		-c copy \
+		-f segment \
+		-segment_time 300 \
+		-reset_timestamps 1 \
+		-strftime 1 \
+		$OUTPUT/${NAME}_%Y%m%d_%H%M%S.mp4 >> $LOG 2>&1
+
+		echo "$(date) - [$NAME] ffmpeg stopped, restarting..." >>$LOG
+		sleep 5
+	     
+	done
+	) &
+
+done < "$CONFIG"
+
+wait
