@@ -22,7 +22,7 @@ System Check -> MAC -> IP -> Stream -> Record -> Log -> Watchdog -> Fix -> Resta
 ### Features
 - **Dynamic IP Handling**: Detects cameras by MAC address, not IP, ensuring continuous recording even if IPs change.
 - **Stream Monitoring**: Continuously checks stream health and automatically restarts recording if issues are detected.
-- **Mutli-Camera Support**: Easily add multiple cameras by configuring their MAC addresses and RTSP URLs.
+- **Multi-Camera Support**: Easily add multiple cameras by configuring their MAC addresses and RTSP URLs.
 - **Real-time watchdog**: Monitors system health and network status, automatically recovering from failures or outages.
 - **Network-aware**: Pauses recording during network outages and automatically resumes when connectivity is restored.
 - **5-minute Segmented Recording**: Saves recordings in 5-minute segments for easier management and retrieval.
