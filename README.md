@@ -49,7 +49,7 @@ smart-cctv-recorder/
 |   |-- devices.conf		 # Secure storage for device information (not included in repo)
 |
 |-- logs/
-|-- recorings/
+|-- recordings/
 |
 |-- .gitignore
 |-- .env.example
