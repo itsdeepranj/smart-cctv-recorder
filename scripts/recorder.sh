@@ -1,87 +1,152 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BASE_DIR="$(dirname "$SCRIPT_DIR")"
+# --------------------------------------------------
+# Base directory
+# --------------------------------------------------
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CONFIG="$BASE_DIR/config/cameras.conf"
-LOG="$BASE_DIR/logs/recorder.log"
 OUTPUT="$BASE_DIR/recordings"
 
-mkdir -p "$OUTPUT"
-mkdir -p "$BASE_DIR/logs"
+# --------------------------------------------------
+# Logging (shared)
+# --------------------------------------------------
+LOG_DIR="$BASE_DIR/logs"
+mkdir -p "$LOG_DIR"
 
-# Rotate log
-if [ -f "$LOG" ]; then
-    mv "$LOG" "$LOG.old"
-fi
-touch "$LOG"
+LOG="$LOG_DIR/recorder_$(date +%F).log"
 
-# Load credentials
-source "$BASE_DIR/secrets/credentials.env"
-
-# Update IPs before start
-"$BASE_DIR/scripts/ip_update.sh"
-
-echo "===================================" >> "$LOG"
-echo "$(date '+%F %T') - Recorder started" >> "$LOG"
-
-# Function to get credentials
-get_credentials() {
-    case "$1" in
-        roof_cam)
-            CAM_USER="$ROOF_CAM_USER"
-            CAM_PASS="$ROOF_CAM_PASS"
-            ;;
-        front_cam)
-            CAM_USER="$FRONT_CAM_USER"
-            CAM_PASS="$FRONT_CAM_PASS"
-            ;;
-        side_cam)
-            CAM_USER="$SIDE_CAM_USER"
-            CAM_PASS="$SIDE_CAM_PASS"
-            ;;
-        *)
-            echo "$(date '+%F %T') - Unknown camera: $1" >> "$LOG"
-            return 1
-            ;;
-    esac
+log() {
+    LEVEL="$1"
+    CAM="$2"
+    EVENT="$3"
+    MSG="$4"
+    echo "$(date '+%F %T') | $LEVEL | $CAM | $EVENT | $MSG" >> "$LOG"
 }
 
-# Start recording per camera
-while read -r NAME IP; do
+log INFO SYSTEM RECORDER "Started"
 
-    get_credentials "$NAME"
+# --------------------------------------------------
+# Load credentials
+# --------------------------------------------------
+source "$BASE_DIR/secrets/credentials.env"
 
-    # Freeze values for subshell
-    CAM_NAME="$NAME"
-    CAM_IP="$IP"
-    CAM_USER_LOCAL="$CAM_USER"
-    CAM_PASS_LOCAL="$CAM_PASS"
+# --------------------------------------------------
+# Initial IP update
+# --------------------------------------------------
+log INFO SYSTEM IP_UPDATE "Initial scan"
+"$BASE_DIR/scripts/ip_update.sh"
 
-    (
-        while true; do
+# --------------------------------------------------
+# Start cameras
+# --------------------------------------------------
+while read -r CAM_NAME CAM_IP; do
 
-            DATE=$(date +%Y-%m-%d)
-            CAM_DIR="$OUTPUT/$DATE/$CAM_NAME"
-            mkdir -p "$CAM_DIR"
+    # freeze values
+    CAM_NAME_LOCAL="$CAM_NAME"
+    CAM_IP_LOCAL="$CAM_IP"
 
-            echo "$(date '+%F %T') - [$CAM_NAME $CAM_IP] Recording started" >> "$LOG"
+(
+    CAM_NAME="$CAM_NAME_LOCAL"
+    CAM_IP="$CAM_IP_LOCAL"
 
-            ffmpeg -rtsp_transport tcp -fflags +genpts -use_wallclock_as_timestamps 1 \
-            -i "rtsp://$CAM_USER_LOCAL:$CAM_PASS_LOCAL@$CAM_IP:554/cam/realmonitor?channel=1&subtype=1" \
-            -c copy \
-            -f segment \
-            -segment_time 300 \
-            -segment_atclocktime 1 \
-            -reset_timestamps 1 \
-            -strftime 1 \
-            "$CAM_DIR/${CAM_NAME}_%Y%m%d_%H%M%S.mp4" >> "$LOG" 2>&1
+    # credentials mapping
+    case "$CAM_NAME" in
+        roof_cam)
+            CAM_USER_LOCAL="$ROOF_CAM_USER"
+            CAM_PASS_LOCAL="$ROOF_CAM_PASS"
+            ;;
+        front_cam)
+            CAM_USER_LOCAL="$FRONT_CAM_USER"
+            CAM_PASS_LOCAL="$FRONT_CAM_PASS"
+            ;;
+        side_cam)
+            CAM_USER_LOCAL="$SIDE_CAM_USER"
+            CAM_PASS_LOCAL="$SIDE_CAM_PASS"
+            ;;
+        *)
+            log ERROR "$CAM_NAME" UNKNOWN_CAMERA "No credentials defined"
+            exit 1
+            ;;
+    esac
 
-            echo "$(date '+%F %T') - [$CAM_NAME] ffmpeg stopped, restarting..." >> "$LOG"
-            sleep 5
+    # validate credentials
+    if [ -z "$CAM_USER_LOCAL" ] || [ -z "$CAM_PASS_LOCAL" ]; then
+        log ERROR "$CAM_NAME" AUTH_CONFIG "Missing username/password"
+        exit 1
+    fi
+
+    # freeze credentials
+    CAM_USER="$CAM_USER_LOCAL"
+    CAM_PASS="$CAM_PASS_LOCAL"
+
+    LAST_IP_UPDATE=0
+
+    while true; do
+
+        mkdir -p "$OUTPUT/$(date +%Y-%m-%d)/$(date +%H)/$CAM_NAME"
+
+        log INFO "$CAM_NAME" START "Recording started (IP=$CAM_IP)"
+
+        ffmpeg -rtsp_transport tcp -fflags +genpts -use_wallclock_as_timestamps 1 \
+        -i "rtsp://$CAM_USER:$CAM_PASS@$CAM_IP:554/cam/realmonitor?channel=1&subtype=1" \
+        -c copy \
+        -f segment \
+        -segment_time 300 \
+        -reset_timestamps 1 \
+        -strftime 1 \
+        "$OUTPUT/%Y-%m-%d/%H/$CAM_NAME/${CAM_NAME}_%Y%m%d_%H%M%S.mp4" 2>&1 | while read line; do
+
+            echo "$line" >> "$LOG"
+
+            if echo "$line" | grep -qi "Connection refused"; then
+                log ERROR "$CAM_NAME" STREAM "Connection refused"
+
+                NOW=$(date +%s)
+                if (( NOW - LAST_IP_UPDATE > 60 )); then
+                    log WARN SYSTEM IP_UPDATE "Triggered by $CAM_NAME"
+                    "$BASE_DIR/scripts/ip_update.sh"
+                    LAST_IP_UPDATE=$NOW
+
+                    CAM_IP=$(grep "^$CAM_NAME " "$CONFIG" | awk '{print $2}')
+                    log INFO "$CAM_NAME" IP_REFRESH "New IP=$CAM_IP"
+                fi
+            fi
+
+            if echo "$line" | grep -qi "timed out"; then
+                log ERROR "$CAM_NAME" STREAM "Timeout"
+            fi
+
+            if echo "$line" | grep -qi "404"; then
+                log ERROR "$CAM_NAME" STREAM "RTSP 404"
+            fi
 
         done
-    ) &
+
+        RET=$?
+
+        if [ $RET -ne 0 ]; then
+            log ERROR "$CAM_NAME" FFMPEG "Exited code $RET"
+
+            NOW=$(date +%s)
+            if (( NOW - LAST_IP_UPDATE > 60 )); then
+                log WARN SYSTEM IP_UPDATE "Triggered by ffmpeg exit ($CAM_NAME)"
+                "$BASE_DIR/scripts/ip_update.sh"
+                LAST_IP_UPDATE=$NOW
+
+                CAM_IP=$(grep "^$CAM_NAME " "$CONFIG" | awk '{print $2}')
+                log INFO "$CAM_NAME" IP_REFRESH "New IP=$CAM_IP"
+            fi
+        fi
+
+        log INFO "$CAM_NAME" HEARTBEAT "Alive"
+        log WARN "$CAM_NAME" RETRY "Restarting in 5s"
+
+        sleep 5
+
+    done
+
+) &
 
 done < "$CONFIG"
 
