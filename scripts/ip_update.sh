@@ -6,7 +6,7 @@
 #------------------------------------------
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-NETWORK_PREFIX="$BAE_DIR/config/network.conf"
+NETWORK_PREFIX=$(cat "$BASE_DIR/config/network.conf")
 DEVICE_CONF="$BASE_DIR/secrets/device.conf"
 CAM_CONF="$BASE_DIR/config/cameras.conf"
 
@@ -52,7 +52,9 @@ while IFS=',' read -r NAME MAC; do
 
 	MAC_UPPER=$(echo "$MAC" | tr '[:lower:]' '[:upper:]')
     
-    IP=$(ip neigh | awk -v  mac="$MAC_UPPER" 'tolower($5)==tolower(mac) {print $1}' | head -n1)
+     IP=$(ip neigh | awk -v mac="$MAC_CLEAN" '
+    tolower($0) ~ mac {print $1}
+    ' | head -n1)
     
     if [ -z "$IP" ]; then
     	log ERROR "$NAME" IP_NOT_FOUND "MAC=$MAC"

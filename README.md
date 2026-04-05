@@ -155,3 +155,10 @@ use .env .example as a template
 - Auto cleanup (retention policy)
 - Cloud backup support
 - Optional AI detection layer
+
+
+## Installation guide
+sudo cp systemd/smart-cctv-recorder.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable smart-cctv-recorder
+sudo systemctl start smart-cctv-recorder

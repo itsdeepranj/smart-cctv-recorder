@@ -1,0 +1,15 @@
+[Unit]
+Description=Smart CCTV Recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/opt/smart-cctv-recorder
+ExecStart=/opt/smart-cctv-recorder/scripts/recorder.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

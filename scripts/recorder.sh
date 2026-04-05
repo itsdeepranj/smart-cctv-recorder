@@ -1,6 +1,12 @@
 #!/bin/bash
 
 # --------------------------------------------------
+# Run the programe one time only
+# --------------------------------------------------
+exec 200>/tmp/recorder.lock
+flock -n 200 || { echo "Recorder already running"; exit 1; }
+
+# --------------------------------------------------
 # Base directory
 # --------------------------------------------------
 BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -84,7 +90,15 @@ while read -r CAM_NAME CAM_IP; do
 
     while true; do
 
-        mkdir -p "$OUTPUT/$(date +%Y-%m-%d)/$(date +%H)/$CAM_NAME"
+        CURRENT_DATE=$(date +%Y-%m-%d)
+    	CURRENT_HOUR=$(date +%H)
+
+    	mkdir -p "$OUTPUT/$CURRENT_DATE/$CURRENT_HOUR/$CAM_NAME"
+
+    	NEXT_DATE=$(date -d '+1 hour' +%Y-%m-%d)
+    	NEXT_HOUR=$(date -d '+1 hour' +%H)
+
+    	mkdir -p "$OUTPUT/$NEXT_DATE/$NEXT_HOUR/$CAM_NAME"
 
         log INFO "$CAM_NAME" START "Recording started (IP=$CAM_IP)"
 
