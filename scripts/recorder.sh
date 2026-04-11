@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 
 # --------------------------------------------------
 # Run the programe one time only
@@ -36,6 +36,16 @@ log INFO SYSTEM RECORDER "Started"
 # Load credentials
 # --------------------------------------------------
 source "$BASE_DIR/secrets/credentials.env"
+
+# --------------------------------------------------
+# Running Status Sent to Telegram
+# --------------------------------------------------
+MSG="🚀 Smart CCTV Recorder started%0AHost: $(hostname)%0ATime: $(date)"
+
+curl -s \
+"https://api.telegram.org/bot$BOT_TOKEN/sendMessage" \
+-d chat_id="$CHAT_ID" \
+-d text="$MSG" >/dev/null
 
 # --------------------------------------------------
 # Initial IP update
@@ -86,19 +96,26 @@ while read -r CAM_NAME CAM_IP; do
     CAM_USER="$CAM_USER_LOCAL"
     CAM_PASS="$CAM_PASS_LOCAL"
 
+    trap "kill 0" EXIT
+
     LAST_IP_UPDATE=0
 
+    # Create folder continuously for current and next hour to avoid ffmpeg issues
+
+    (
     while true; do
 
-        CURRENT_DATE=$(date +%Y-%m-%d)
-    	CURRENT_HOUR=$(date +%H)
+        for h in 0 1 2; do
+        DATE=$(date -d "+$h hour" +%Y-%m-%d)
+        HOUR=$(date -d "+$h hour" +%H)
+        mkdir -p "$OUTPUT/$DATE/$HOUR/$CAM_NAME"
+    	done
+        sleep 5
+    done
+    ) &
 
-    	mkdir -p "$OUTPUT/$CURRENT_DATE/$CURRENT_HOUR/$CAM_NAME"
-
-    	NEXT_DATE=$(date -d '+1 hour' +%Y-%m-%d)
-    	NEXT_HOUR=$(date -d '+1 hour' +%H)
-
-    	mkdir -p "$OUTPUT/$NEXT_DATE/$NEXT_HOUR/$CAM_NAME"
+    # Recorder loop
+    while true; do
 
         log INFO "$CAM_NAME" START "Recording started (IP=$CAM_IP)"
 
@@ -156,7 +173,7 @@ while read -r CAM_NAME CAM_IP; do
         log INFO "$CAM_NAME" HEARTBEAT "Alive"
         log WARN "$CAM_NAME" RETRY "Restarting in 5s"
 
-        sleep 5
+        sleep 20
 
     done
 
